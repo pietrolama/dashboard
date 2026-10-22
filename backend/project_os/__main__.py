@@ -23,6 +23,8 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8765)
     serve.add_argument("--open", action="store_true", help="open the browser")
 
+    sub.add_parser("mcp", help="run MCP server over stdio for AI agents")
+
     add = sub.add_parser("add-root", help="register a directory to scan")
     add.add_argument("path")
     add.add_argument("--max-depth", type=int, default=3)
@@ -88,6 +90,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.open:
             webbrowser.open(f"http://{args.host}:{args.port}")
         uvicorn.run(create_app(settings), host=args.host, port=args.port)
+        return 0
+
+    if args.command == "mcp":
+        from .mcp_server import run_server
+        import asyncio
+
+        asyncio.run(run_server())
         return 0
 
     registry = Registry(Database(settings.db_path))

@@ -100,6 +100,16 @@ Da riga di comando:
 
 Gli schemi sono in `backend/project_os/schemas/`.
 
+## Server MCP
+
+`project_os mcp` espone Project OS agli agenti su stdio (SDK MCP ufficiale). Tool: `list_projects`, `get_project_context`, `get_project_memory`, `record_decision`, `log_work_session`, `preview_resume`, `export_resume`, `scan_projects`. Le voci scritte da un agente hanno `source = agent`; `scan_projects` lavora solo sulle sorgenti già registrate.
+
+Per Claude Code:
+
+```bash
+claude mcp add project-os -e PYTHONPATH=/percorso/dashboard/backend -- /percorso/dashboard/.venv/bin/python -m project_os mcp
+```
+
 ## Test
 
 ```bash
