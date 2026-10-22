@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-os.local/schemas/prp-evidence-1.schema.json",
+  "title": "Project Resume Protocol — evidence",
+  "type": "object",
+  "required": ["schema_version", "brief_id", "items"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.\\d+$" },
+    "brief_id": { "type": "string" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "claim", "source", "observed_at", "result", "integrity", "limitations"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^ev_[a-z0-9_]+$" },
+          "type": {
+            "enum": ["git_commit", "working_tree_snapshot", "file_snapshot", "test_result", "build_result",
+                     "user_statement", "decision_record", "agent_analysis"]
+          },
+          "claim": { "type": "string", "minLength": 1 },
+          "source": {
+            "type": "object",
+            "required": ["kind", "label", "path", "commit"],
+            "properties": {
+              "kind": { "enum": ["git", "file", "filesystem", "project_os", "command"] },
+              "label": { "type": "string" },
+              "path": { "type": ["string", "null"] },
+              "commit": { "type": ["string", "null"] }
+            }
+          },
+          "observed_at": { "type": "string", "format": "date-time" },
+          "result": { "type": ["object", "null"] },
+          "integrity": {
+            "type": "object",
+            "required": ["algorithm", "value", "covers"],
+            "properties": {
+              "algorithm": { "const": "sha256" },
+              "value": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+              "covers": { "enum": ["file", "result"] }
+            }
+          },
+          "limitations": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

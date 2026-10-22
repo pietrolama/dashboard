@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-os.local/schemas/prp-manifest-1.schema.json",
+  "title": "Project Resume Protocol — manifest",
+  "description": "Canonical, versioned resume brief. Unknown properties must be ignored by consumers of the same major version.",
+  "type": "object",
+  "required": ["protocol", "brief_id", "generated_at", "generator", "project", "resume", "state",
+               "constraints", "decisions", "open_questions", "next_actions", "evidence", "agent_policy", "export"],
+  "properties": {
+    "protocol": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "project-resume-protocol" },
+        "version": { "type": "string", "pattern": "^1\\.\\d+\\.\\d+$" }
+      }
+    },
+    "brief_id": { "type": "string", "pattern": "^resume_[0-9A-Za-z_]+$" },
+    "generated_at": { "$ref": "#/$defs/timestamp" },
+    "generator": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": { "name": { "type": "string" }, "version": { "type": "string" } }
+    },
+    "project": {
+      "type": "object",
+      "required": ["id", "slug", "name", "root", "repository"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "slug": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "root": { "type": ["string", "null"] },
+        "repository": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["vcs", "branch", "head_commit", "working_tree"],
+              "properties": {
+                "vcs": { "enum": ["git", "none"] },
+                "branch": { "type": ["string", "null"] },
+                "head_commit": { "type": ["string", "null"] },
+                "working_tree": { "enum": ["clean", "dirty", "unknown"] },
+                "remote": { "type": ["string", "null"] }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "resume": {
+      "type": "object",
+      "required": ["last_session_id", "last_verified_at", "freshness", "mission", "goal"],
+      "properties": {
+        "last_session_id": { "type": ["integer", "null"] },
+        "last_verified_at": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/timestamp" }] },
+        "freshness": { "enum": ["current", "partial", "stale", "unknown"] },
+        "mission": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sourcedValue" }] },
+        "goal": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sourcedValue" }] }
+      }
+    },
+    "state": {
+      "type": "object",
+      "required": ["lifecycle", "phase", "verified_facts", "declared_facts", "inferences", "unknowns"],
+      "properties": {
+        "lifecycle": { "enum": ["active", "paused", "archived"] },
+        "phase": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/sourcedValue" },
+                { "properties": { "value": { "enum": ["idea", "prototype", "development", "stabilization", "release"] } } }
+              ]
+            }
+          ]
+        },
+        "verified_facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "text", "evidence_ids"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^vf_\\d+$" },
+              "text": { "type": "string", "minLength": 1 },
+              "evidence_ids": { "$ref": "#/$defs/evidenceIds", "minItems": 1 }
+            }
+          }
+        },
+        "declared_facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "text", "source", "evidence_ids"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^df_\\d+$" },
+              "text": { "type": "string", "minLength": 1 },
+              "source": { "$ref": "#/$defs/source" },
+              "evidence_ids": { "$ref": "#/$defs/evidenceIds", "minItems": 1 }
+            }
+          }
+        },
+        "inferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "text", "method", "confidence", "evidence_ids"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^inf_\\d+$" },
+              "text": { "type": "string", "minLength": 1 },
+              "method": { "enum": ["rule", "ai"] },
+              "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+              "evidence_ids": { "$ref": "#/$defs/evidenceIds", "minItems": 1 }
+            }
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "text"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^unk_\\d+$" },
+              "text": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "rationale", "scope", "source", "status", "priority", "evidence_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^con_\\d+$" },
+          "text": { "type": "string", "minLength": 1 },
+          "rationale": { "type": ["string", "null"] },
+          "scope": { "enum": ["project"] },
+          "source": { "$ref": "#/$defs/source" },
+          "status": { "enum": ["active", "review"] },
+          "priority": { "const": "mandatory" },
+          "evidence_ids": { "$ref": "#/$defs/evidenceIds", "minItems": 1 }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status", "rationale", "alternatives_rejected", "supersedes", "superseded_by",
+                     "source", "decided_at", "evidence_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^dec_\\d+$" },
+          "title": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["active", "review", "superseded"] },
+          "rationale": { "type": ["string", "null"] },
+          "alternatives_rejected": { "type": "array", "items": { "type": "string" } },
+          "supersedes": { "type": ["string", "null"], "pattern": "^(dec|con)_\\d+$" },
+          "superseded_by": { "type": ["string", "null"], "pattern": "^(dec|con)_\\d+$" },
+          "source": { "$ref": "#/$defs/source" },
+          "decided_at": { "$ref": "#/$defs/timestamp" },
+          "evidence_ids": { "$ref": "#/$defs/evidenceIds", "minItems": 1 }
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "question", "impact", "blocking", "status", "source", "evidence_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^q_\\d+$" },
+          "question": { "type": "string", "minLength": 1 },
+          "impact": { "enum": ["low", "medium", "high", "unspecified"] },
+          "blocking": { "type": ["boolean", "null"] },
+          "status": { "const": "open" },
+          "source": { "$ref": "#/$defs/source" },
+          "evidence_ids": { "$ref": "#/$defs/evidenceIds", "minItems": 1 }
+        }
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status", "priority", "rationale", "acceptance_criteria", "depends_on",
+                     "source", "evidence_ids", "requires_approval"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^act_\\d+$" },
+          "title": { "type": "string", "minLength": 1 },
+          "status": { "const": "proposed" },
+          "priority": { "enum": ["low", "medium", "high", "unspecified"] },
+          "rationale": { "type": ["string", "null"] },
+          "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+          "depends_on": { "type": "array", "items": { "type": "string", "pattern": "^act_\\d+$" } },
+          "source": { "$ref": "#/$defs/source" },
+          "evidence_ids": { "$ref": "#/$defs/evidenceIds", "minItems": 1 },
+          "requires_approval": { "type": "boolean" }
+        }
+      }
+    },
+    "evidence": {
+      "description": "Identifiers of the evidence items shipped in evidence.json.",
+      "$ref": "#/$defs/evidenceIds"
+    },
+    "agent_policy": {
+      "type": "object",
+      "required": ["mode", "may_modify_files", "may_run_tests", "may_install_dependencies", "may_commit",
+                   "may_push", "may_delete_files", "may_change_constraints", "require_approval_for"],
+      "properties": {
+        "mode": { "enum": ["analysis_only", "implementation_within_scope"] },
+        "may_modify_files": { "type": "boolean" },
+        "may_run_tests": { "type": "boolean" },
+        "may_install_dependencies": { "type": "boolean" },
+        "may_commit": { "type": "boolean" },
+        "may_push": { "type": "boolean" },
+        "may_delete_files": { "type": "boolean" },
+        "may_change_constraints": { "type": "boolean" },
+        "require_approval_for": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "export": {
+      "type": "object",
+      "required": ["files", "contains_secrets"],
+      "properties": {
+        "files": { "type": "array", "items": { "type": "string" } },
+        "contains_secrets": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "timestamp": { "type": "string", "format": "date-time" },
+    "evidenceIds": { "type": "array", "items": { "type": "string", "pattern": "^ev_[a-z0-9_]+$" }, "uniqueItems": true },
+    "source": {
+      "description": "Who stated or observed this: user, readme, git, filesystem, project_os, or the writer recorded by Project OS (cli, agent, …).",
+      "type": "string",
+      "minLength": 1
+    },
+    "sourcedValue": {
+      "type": "object",
+      "required": ["value", "source", "evidence_ids"],
+      "properties": {
+        "value": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/$defs/source" },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds", "minItems": 1 }
+      }
+    }
+  }
+}

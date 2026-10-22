@@ -1,0 +1,111 @@
+# Project OS
+
+Dashboard locale di tutti i tuoi progetti. Milestone completate:
+
+1. **Project Registry**: catalogo persistente, scansione Git/filesystem, scheda progetto.
+2. **Memoria operativa**: registro delle decisioni e dei vincoli, sessioni di lavoro, "dove eri rimasto".
+3. **Riprendi progetto**: briefing portabile nel formato Project Resume Protocol (PRP 1.0) per Claude Code e altri dev agent.
+
+## Avvio
+
+```bash
+./run.sh --open          # http://127.0.0.1:8765
+```
+
+Al primo avvio vai su **Sorgenti** e aggiungi la cartella che contiene i progetti (es. `~/projects`).
+
+Da riga di comando (dalla cartella `backend/`):
+
+```bash
+../.venv/bin/python -m project_os add-root ~/projects
+../.venv/bin/python -m project_os scan
+../.venv/bin/python -m project_os list
+```
+
+Sviluppo frontend con hot reload: avvia il backend, poi `cd frontend && npm run dev` (fa da proxy per `/api` verso la porta 8765).
+
+## Configurazione
+
+| Variabile | Default | |
+|---|---|---|
+| `PROJECT_OS_DB` | `~/.local/share/project-os/project_os.db` | database SQLite |
+| `PROJECT_OS_SCAN_INTERVAL` | `900` | secondi tra le scansioni automatiche, `0` per disattivarle |
+| `PROJECT_OS_FRONTEND` | `frontend/dist` | build del frontend servita dal backend |
+| `PROJECT_OS_EXPORTS` | `~/.local/share/project-os/exports` | dove vengono scritti i briefing |
+
+## Come funziona
+
+- **Scoperta**: ogni repository Git sotto una sorgente (fino alla profondità configurata) diventa un progetto. Una cartella di primo livello senza Git vale come progetto se contiene file di progetto (sorgenti, README, `package.json`, patch `.pd`, Gradle…), a meno che non serva solo a raggruppare altri repo. I link simbolici non vengono seguiti.
+- **Evidenze**: per ogni fonte (`git`, `readme`, `filesystem`) si salva un'osservazione solo quando il contenuto cambia (hash SHA-256). Una nuova scansione senza modifiche non scrive niente.
+- **Eventi**: nuovi commit, cambio branch, working tree sporca/pulita, README modificato, cartella sparita/ritrovata, modifiche fatte da te.
+- **Stato dichiarato e stato osservato restano separati**: nome, descrizione, ciclo di vita, fase e priorità li decidi tu e lo scanner non li tocca mai. Lo stato di salute (`Recente`, `Fermo` dopo 30 giorni, `Non trovato`, `Sconosciuto`) è calcolato dalle evidenze.
+- **Errori**: se un repo o una sorgente non si leggono, l'errore va nello storico scansioni e lo stato precedente resta com'è. I progetti spariti vengono segnalati, mai cancellati.
+- **Privacy**: legge solo elenchi di file, metadati, stato Git e README. Le credenziali negli URL dei remote vengono rimosse. Tutto resta in locale.
+
+## Memoria operativa
+
+Ogni progetto ha una memoria dichiarata (da te o da un agente), separata da ciò che osserva lo scanner.
+
+- **Decisioni e vincoli**: cosa è stato deciso, perché, quali alternative sono state scartate. Una decisione non si cancella: o si corregge (refusi) o si **sostituisce** con una nuova, e quella vecchia resta nello storico. Una decisione può essere segnata come *da rivedere*.
+- **Sessioni di lavoro**: obiettivo, com'è andata, domande aperte e prossimo passo. Può esserci al massimo una sessione aperta per progetto. Il **prossimo passo** e le **domande aperte** dell'ultima sessione chiusa compaiono nella scheda ("Dove eri rimasto") e sotto il progetto in dashboard.
+
+Dalla riga di comando, per esempio alla fine di una sessione con un dev agent:
+
+```bash
+cd backend
+../.venv/bin/python -m project_os decide orbit "SQLite come unica persistenza" --why "local-first" --alternatives "Postgres"
+../.venv/bin/python -m project_os decide orbit "Niente dipendenze cloud" --constraint
+../.venv/bin/python -m project_os decide orbit "SQLite + FTS5" --supersedes 1
+../.venv/bin/python -m project_os session-start orbit "Rifinire la vista relazioni"
+../.venv/bin/python -m project_os session-end orbit --outcome "..." --question "Cytoscape o React Flow?" --next "Aggiungere i filtri"
+../.venv/bin/python -m project_os session-log orbit "Fix rapido" --next "..."   # sessione già conclusa, in un passo
+../.venv/bin/python -m project_os memory orbit
+```
+
+`--source agent` fa comparire nello storico chi ha scritto la voce (default `cli`).
+
+## Riprendi progetto (PRP 1.0)
+
+Dalla scheda di un progetto, **Riprendi progetto** rilegge il repository e genera un bundle:
+
+```
+~/.local/share/project-os/exports/<slug>/<brief_id>/
+├── RESUME.md       # briefing per l'agente: 10 sezioni fisse
+├── manifest.json   # dati canonici, validati con JSON Schema
+├── evidence.json   # su cosa si basa ogni affermazione, con sha256
+└── SHA256SUMS      # integrità dei tre file
+```
+
+`exports/<slug>/latest` punta sempre all'ultimo bundle. Il dialogo mostra il comando pronto per avviare Claude Code nella cartella del progetto a partire dal briefing.
+
+Principi del formato (dalla specifica):
+- **verificato / dichiarato / dedotto / sconosciuto** sono sempre separati. Il README è una dichiarazione, non un fatto verificato. Le informazioni mancanti sono elencate, mai inventate (per esempio lo stato dei test, che Project OS non conosce).
+- Ogni fatto verificato rimanda a un'evidenza in `evidence.json`. Le evidenze sui file portano l'hash del file reale.
+- Le decisioni sostituite restano, marcate come tali. Le azioni sono sempre `proposed`, mai "fatte".
+- **Policy dell'agente**: `implementation_within_scope` (default) o `analysis_only`. In entrambi i casi niente commit, push, nuove dipendenze o cancellazioni senza approvazione. È una dichiarazione d'intenti: a farla rispettare sono i permessi dell'agente.
+- Il testo che viene dal repository o dalle sessioni è trattato come dato: non può aggiungere sezioni o permessi al briefing.
+- La generazione non scrive nulla nel repository. Il bundle viene scritto in una cartella temporanea e pubblicato solo se valido e completo.
+
+Da riga di comando:
+
+```bash
+../.venv/bin/python -m project_os resume orbit                      # scrive il bundle, stampa il percorso
+../.venv/bin/python -m project_os resume orbit --format markdown    # solo RESUME.md su stdout
+../.venv/bin/python -m project_os resume orbit --format json        # solo manifest.json su stdout
+../.venv/bin/python -m project_os resume orbit --mode analysis_only
+../.venv/bin/python -m project_os resume-check ~/.local/share/project-os/exports/orbit/latest
+```
+
+`resume-check` esce con 0 se il bundle è integro e il progetto non è cambiato, 1 se il bundle è corrotto o non valido, 2 se il progetto è andato avanti (HEAD spostato, working tree diversa, file cambiati).
+
+Gli schemi sono in `backend/project_os/schemas/`.
+
+## Test
+
+```bash
+cd backend && ../.venv/bin/python -m pytest
+```
+
+## Prossime milestone
+
+Dalla roadmap: mappa radiale delle relazioni → analisi AI opzionale (sintesi e contraddizioni, salvate come evidenze `agent_analysis`).
