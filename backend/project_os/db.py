@@ -124,6 +124,18 @@ MIGRATIONS: list[str] = [
     -- At most one session in progress per project.
     CREATE UNIQUE INDEX one_open_session ON work_sessions (project_id) WHERE ended_at IS NULL;
     """,
+    # 3 — Scan ignore list
+    """
+    -- Glob patterns, matched against each candidate's path relative to its
+    -- root (and its absolute path). A matching directory is never descended
+    -- into, so nested repositories under it are skipped too. Used to keep
+    -- vendored dependencies and archived trees out of the registry.
+    CREATE TABLE scan_ignores (
+        id          INTEGER PRIMARY KEY,
+        pattern     TEXT NOT NULL UNIQUE,
+        created_at  TEXT NOT NULL
+    );
+    """,
 ]
 
 

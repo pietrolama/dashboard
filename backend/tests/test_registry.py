@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 
 from project_os import discovery
-from project_os.registry import Conflict
+from project_os.registry import Conflict, NotFound
 from tests.conftest import git, make_repo
 
 
@@ -208,3 +208,47 @@ def test_state_survives_restart(tmp_path, workspace):
     second = Registry(Database(tmp_path / "persist.db"))
     assert second.list_projects()[0]["lifecycle"] == "paused"
     assert second.scan()["stats"]["unchanged"] == 1
+
+
+def test_ignore_skips_nested_dependency(registry, workspace):
+    # A non-git app folder with a vendored git repo inside it (like imageGen).
+    (workspace / "app").mkdir()
+    (workspace / "app" / "app.py").write_text("print('app')\n")
+    make_repo(workspace / "app" / "vendor-lib")        # a vendored dependency inside it
+    registry.add_root(str(workspace))
+
+    registry.scan()
+    assert {p["name"] for p in registry.list_projects()} == {"app", "vendor-lib"}
+
+    res = registry.add_ignore("app/vendor-lib")
+    assert res["dropped"] == ["vendor-lib"]            # the already-discovered one is forgotten
+    assert registry.list_ignores() == ["app/vendor-lib"]
+    assert {p["name"] for p in registry.list_projects()} == {"app"}
+
+    run = registry.scan()                              # a rescan does not bring it back
+    assert {p["name"] for p in registry.list_projects()} == {"app"}
+    assert "app" in {p["name"] for p in registry.list_projects()}
+    assert run["status"] == "ok"
+
+
+def test_ignore_glob_covers_a_whole_subtree(registry, workspace):
+    make_repo(workspace / "live")
+    make_repo(workspace / "archive" / "old-one")
+    make_repo(workspace / "archive" / "old-two")
+    registry.add_root(str(workspace))
+    registry.scan()
+
+    registry.add_ignore("archive/*")
+    names = {p["name"] for p in registry.list_projects()}
+    assert names == {"live"}
+
+
+def test_duplicate_and_missing_ignore(registry, workspace):
+    registry.add_root(str(workspace))
+    registry.add_ignore("x/y")
+    with pytest.raises(Conflict):
+        registry.add_ignore("x/y")
+    with pytest.raises(NotFound):
+        registry.remove_ignore("not/there")
+    registry.remove_ignore("x/y")
+    assert registry.list_ignores() == []

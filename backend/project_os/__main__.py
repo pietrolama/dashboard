@@ -33,6 +33,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("scan", help="scan all roots now")
     sub.add_parser("list", help="list projects")
 
+    ign = sub.add_parser("ignore", help="skip a path glob when scanning (e.g. vendored deps)")
+    ign.add_argument("pattern", help="glob relative to a root, e.g. imageGen/stable-diffusion.cpp")
+    sub.add_parser("ignores", help="list ignore patterns")
+    unign = sub.add_parser("unignore", help="remove an ignore pattern")
+    unign.add_argument("pattern")
+
     def with_source(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         p.add_argument("--source", default="cli", help="who is writing: cli, agent, … (shown in the history)")
         return p
@@ -114,6 +120,16 @@ def main(argv: list[str] | None = None) -> int:
             for p in registry.list_projects():
                 activity = (p["last_activity_at"] or "—")[:10]
                 print(f"{p['health']:<8} {p['lifecycle']:<8} {activity}  {p['slug']}")
+        elif args.command == "ignore":
+            res = registry.add_ignore(args.pattern)
+            dropped = ", ".join(res["dropped"]) or "none"
+            print(f"Ignoring {res['pattern']}  (dropped: {dropped})")
+        elif args.command == "ignores":
+            for pat in registry.list_ignores():
+                print(pat)
+        elif args.command == "unignore":
+            registry.remove_ignore(args.pattern)
+            print(f"Removed {args.pattern}")
         elif args.command == "resume":
             return _resume(args, registry, settings)
         else:

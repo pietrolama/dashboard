@@ -99,6 +99,61 @@ class Registry:
             raise NotFound(f"root {root_id}")
         return dict(row) | {"enabled": bool(row["enabled"])}
 
+    # --------------------------------------------------------------- ignores
+
+    def list_ignores(self) -> list[str]:
+        return [r["pattern"] for r in
+                self.db.query("SELECT pattern FROM scan_ignores ORDER BY pattern")]
+
+    def add_ignore(self, pattern: str) -> dict:
+        """Add a glob to the scan ignore list and forget projects it now covers.
+
+        Returns the pattern and the slugs of projects dropped because of it.
+        """
+        pattern = pattern.strip().rstrip("/")
+        if not pattern:
+            raise Conflict("ignore pattern is required")
+        try:
+            with self.db.transaction() as c:
+                c.execute("INSERT INTO scan_ignores (pattern, created_at) VALUES (?, ?)",
+                          (pattern, utcnow()))
+        except sqlite3.IntegrityError as exc:
+            raise Conflict(f"Pattern already ignored: {pattern}") from exc
+        dropped = self._forget_ignored([pattern])
+        return {"pattern": pattern, "dropped": dropped}
+
+    def remove_ignore(self, pattern: str) -> None:
+        with self.db.transaction() as c:
+            cur = c.execute("DELETE FROM scan_ignores WHERE pattern = ?", (pattern.strip(),))
+        if not cur.rowcount:
+            raise NotFound(f"ignore pattern {pattern!r}")
+
+    def _forget_ignored(self, patterns: list[str]) -> list[str]:
+        """Delete discovered projects whose repositories all match an ignore glob.
+
+        A project is dropped only when every one of its live repositories is
+        ignored, so a folder that also holds real projects is never removed.
+        """
+        dropped: list[str] = []
+        roots = {r["id"]: Path(r["path"]) for r in self.db.query("SELECT id, path FROM roots")}
+        projects = self.db.query("SELECT id, slug, origin FROM projects")
+        for p in projects:
+            if p["origin"] != "discovered":
+                continue
+            repos = self.db.query(
+                "SELECT path, root_id FROM repositories WHERE project_id = ? AND missing_since IS NULL",
+                (p["id"],))
+            if not repos:
+                continue
+            if all(r["root_id"] in roots
+                   and discovery._ignored(Path(r["path"]), roots[r["root_id"]], patterns)
+                   for r in repos):
+                with self.db.transaction() as c:
+                    c.execute("DELETE FROM projects_fts WHERE rowid = ?", (p["id"],))
+                    c.execute("DELETE FROM projects WHERE id = ?", (p["id"],))
+                dropped.append(p["slug"])
+        return dropped
+
     # ------------------------------------------------------------------- scan
 
     def scan(self) -> dict:
@@ -124,10 +179,11 @@ class Registry:
                  "unchanged": 0, "missing": 0, "restored": 0}
         errors: list[dict] = []
         roots = self.db.query("SELECT * FROM roots WHERE enabled = 1 ORDER BY path")
+        ignore = self.list_ignores()
 
         for root in roots:
             try:
-                candidates = discovery.find_candidates(Path(root["path"]), root["max_depth"])
+                candidates = discovery.find_candidates(Path(root["path"]), root["max_depth"], ignore)
             except OSError as exc:
                 errors.append({"root": root["path"], "error": str(exc)})
                 continue

@@ -7,6 +7,7 @@ README files — never `.env`, keys or other configuration files.
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 from dataclasses import dataclass
@@ -115,7 +116,16 @@ def _has_own_code(path: Path) -> bool:
     return False
 
 
-def find_candidates(root: Path, max_depth: int = 3) -> list[Candidate]:
+def _ignored(path: Path, root: Path, patterns: list[str]) -> bool:
+    """True if `path` matches any ignore glob, relative to `root` or absolute."""
+    if not patterns:
+        return False
+    rel = path.relative_to(root).as_posix()
+    absolute = path.as_posix()
+    return any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(absolute, p) for p in patterns)
+
+
+def find_candidates(root: Path, max_depth: int = 3, ignore: list[str] | None = None) -> list[Candidate]:
     """Return the projects found under `root`.
 
     Git repositories are found at any depth up to `max_depth` and are not
@@ -124,12 +134,17 @@ def find_candidates(root: Path, max_depth: int = 3) -> list[Candidate]:
     groups other Git repositories: one holding repos counts only if it has code
     of its own (an app with a vendored repo), not just notes.
 
+    Candidates matching an `ignore` glob (relative to `root`, or absolute) are
+    skipped, and such a directory is not descended into, so repositories nested
+    under it are left out too.
+
     Raises OSError if the root itself cannot be read.
     """
     root = root.expanduser()
     if not root.is_dir():
         raise FileNotFoundError(f"root is not a directory: {root}")
     os.listdir(root)  # surface PermissionError for the root itself
+    patterns = ignore or []
 
     found: list[Candidate] = []
 
@@ -137,6 +152,8 @@ def find_candidates(root: Path, max_depth: int = 3) -> list[Candidate]:
         """Collect repos below `directory`; return True if any were found."""
         hit = False
         for child in _subdirs(directory):
+            if _ignored(child, root, patterns):
+                continue
             if gitinfo.is_git_repo(child):
                 found.append(Candidate(child, "git"))
                 hit = True
