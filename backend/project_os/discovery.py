@@ -100,13 +100,29 @@ def _looks_like_project(path: Path) -> bool:
     return False
 
 
+def _has_own_code(path: Path) -> bool:
+    """True if the directory has source files or a build manifest of its own at the top
+    level, not just notes: then it is a project even when it also holds Git repos."""
+    try:
+        with os.scandir(path) as it:
+            for e in it:
+                if e.is_file(follow_symlinks=False):
+                    name = e.name.lower()
+                    if name in STACK_BY_FILE or Path(name).suffix in STACK_BY_EXT:
+                        return True
+    except (PermissionError, FileNotFoundError):
+        pass
+    return False
+
+
 def find_candidates(root: Path, max_depth: int = 3) -> list[Candidate]:
     """Return the projects found under `root`.
 
     Git repositories are found at any depth up to `max_depth` and are not
     descended into. A direct child of the root that is not a Git repository
     still counts as a project when it contains project files, unless it only
-    groups other Git repositories.
+    groups other Git repositories: one holding repos counts only if it has code
+    of its own (an app with a vendored repo), not just notes.
 
     Raises OSError if the root itself cannot be read.
     """
@@ -126,6 +142,8 @@ def find_candidates(root: Path, max_depth: int = 3) -> list[Candidate]:
                 hit = True
             elif depth < max_depth and walk(child, depth + 1):
                 hit = True
+                if depth == 1 and _has_own_code(child):
+                    found.append(Candidate(child, "none"))
             elif depth == 1 and _looks_like_project(child):
                 found.append(Candidate(child, "none"))
         return hit

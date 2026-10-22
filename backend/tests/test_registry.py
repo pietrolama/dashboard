@@ -17,6 +17,9 @@ def event_types(registry, project_id=None):
 def test_discovers_git_and_plain_projects(registry, workspace):
     make_repo(workspace / "alpha")
     make_repo(workspace / "group" / "beta")  # nested repo; 'group' only groups repos
+    (workspace / "group" / "NOTES.md").write_text("# Notes\n")  # notes are not code
+    make_repo(workspace / "app" / "vendored")  # an app with a repo inside it
+    (workspace / "app" / "app.py").write_text("print('app')\n")
     (workspace / "patch").mkdir()
     (workspace / "patch" / "synth.pd").write_text("#N canvas;\n")
     (workspace / "empty").mkdir()
@@ -27,7 +30,8 @@ def test_discovers_git_and_plain_projects(registry, workspace):
 
     assert run["status"] == "ok"
     projects = {p["name"]: p for p in registry.list_projects()}
-    assert set(projects) == {"alpha", "beta", "patch"}
+    assert set(projects) == {"alpha", "beta", "patch", "app", "vendored"}
+    assert projects["app"]["repositories"][0]["vcs"] == "none"
     assert projects["alpha"]["repositories"][0]["vcs"] == "git"
     assert projects["alpha"]["readme_title"] == "Demo"
     assert projects["alpha"]["readme_summary"] == "A demo project."
