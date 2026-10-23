@@ -5,6 +5,7 @@ Dashboard locale di tutti i tuoi progetti. Milestone completate:
 1. **Project Registry**: catalogo persistente, scansione Git/filesystem, scheda progetto.
 2. **Memoria operativa**: registro delle decisioni e dei vincoli, sessioni di lavoro, "dove eri rimasto".
 3. **Riprendi progetto**: briefing portabile nel formato Project Resume Protocol (PRP 1.0) per Claude Code e altri dev agent.
+4. **Team**: Claude Code e Antigravity lavorano insieme su una richiesta, ciascuno nel proprio terminale e branch.
 
 ## Avvio
 
@@ -32,6 +33,9 @@ Sviluppo frontend con hot reload: avvia il backend, poi `cd frontend && npm run 
 | `PROJECT_OS_SCAN_INTERVAL` | `900` | secondi tra le scansioni automatiche, `0` per disattivarle |
 | `PROJECT_OS_FRONTEND` | `frontend/dist` | build del frontend servita dal backend |
 | `PROJECT_OS_EXPORTS` | `~/.local/share/project-os/exports` | dove vengono scritti i briefing |
+| `PROJECT_OS_TEAM_DIR` | `~/.local/share/project-os/team` | prompt e script di avvio dei team run |
+| `PROJECT_OS_WORKTREES` | `<cartella del progetto>/../.project-os-worktrees` | dove vengono creati i worktree degli agenti |
+| `PROJECT_OS_TERMINAL` | `x-terminal-emulator -e` | comando che apre una finestra di terminale; vi viene aggiunto `tmux attach -t …` |
 
 ## Come funziona
 
@@ -100,9 +104,25 @@ Da riga di comando:
 
 Gli schemi sono in `backend/project_os/schemas/`.
 
+## Team: Claude Code + Antigravity
+
+Dalla scheda di un progetto Git scrivi cosa fare e premi **Pianifica**.
+
+1. **Piano.** Claude (`claude -p`, sola lettura) legge il progetto e divide il lavoro in attività, assegnando a `claude` e `agy` file diversi. Il piano compare nella dashboard: puoi cambiare assegnazioni, testi, togliere o aggiungere attività.
+2. **Avvio.** Ogni agente riceve un git worktree e un branch propri (`team/<run>-claude`, `team/<run>-agy`, a partire dall'ultimo commit) e parte nella sua CLI interattiva, in una sessione tmux `pos-<run>` aperta in una finestra di terminale. Modificano i file del proprio worktree senza chiedere; i comandi shell chiedono conferma nel terminale. La dashboard segnala quando un agente aspetta una tua risposta.
+3. **Coordinamento.** Gli agenti usano i tool MCP `team_board`, `team_task`, `team_message` e `team_done`. Un messaggio o un'attività completata arriva anche nel terminale dell'altro agente, come riga `[team] …`. Puoi scrivere agli agenti dalla dashboard.
+4. **Integrazione.** Quando tutti hanno chiamato `team_done` (o premi **Integra ora**), Project OS committa il lavoro rimasto fuori (senza file generati come `__pycache__` o `node_modules`), unisce i branch in `team/<run>` e Claude rivede il diff complessivo. In caso di conflitto lo risolvi nel worktree di integrazione e premi **Riprova integrazione**.
+5. **Applica o scarta.** **Applica** porta `team/<run>` sul branch di partenza come un unico commit (squash): il progetto deve essere su quel branch e senza modifiche non committate. **Scarta** chiude i terminali e cancella worktree e branch del run.
+
+Requisiti: `claude`, `agy` e `tmux` nel PATH, e il server MCP `project-os` registrato in entrambe le CLI (vedi sotto).
+
+Prima volta per progetto: Claude Code chiede se autorizzare la cartella e propone «No, exit». Scegli «Yes»: i worktree dei run successivi ereditano l'autorizzazione. Antigravity lo chiede per ogni worktree, con «Yes» come default.
+
+Da riga di comando, `project_os agent-run claude|agy "prompt" --project <slug>` esegue un agente una volta, in modo non interattivo, e stampa il risultato in JSON.
+
 ## Server MCP
 
-`project_os mcp` espone Project OS agli agenti su stdio (SDK MCP ufficiale). Tool: `list_projects`, `get_project_context`, `get_project_memory`, `record_decision`, `log_work_session`, `preview_resume`, `export_resume`, `scan_projects`. Le voci scritte da un agente hanno `source = agent`; `scan_projects` lavora solo sulle sorgenti già registrate.
+`project_os mcp` espone Project OS agli agenti su stdio (SDK MCP ufficiale). Tool: `list_projects`, `get_project_context`, `get_project_memory`, `record_decision`, `log_work_session`, `preview_resume`, `export_resume`, `scan_projects` e, per i team run, `team_board`, `team_task`, `team_message`, `team_done`. Le voci scritte da un agente hanno `source = agent`; `scan_projects` lavora solo sulle sorgenti già registrate.
 
 Per Claude Code:
 

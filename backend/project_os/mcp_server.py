@@ -14,6 +14,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from . import resume
+from .team import Team
 from .config import Settings
 from .db import Database
 from .errors import Conflict, NotFound
@@ -48,10 +49,11 @@ def create_mcp_server(settings: Settings | None = None, db: Database | None = No
     settings = settings or Settings.from_env()
     db = db or Database(settings.db_path)
     registry = Registry(db)
+    team = Team(db, settings)
 
     server = MCPServer(
         name="project-os",
-        version="0.3.0",
+        version="0.4.0",
         instructions="MCP server for Project OS - local multi-project dashboard and memory.",
     )
 
@@ -236,6 +238,58 @@ def create_mcp_server(settings: Settings | None = None, db: Database | None = No
             return registry.scan()
         except (NotFound, Conflict) as exc:
             raise ToolError(str(exc)) from exc
+
+    # ---- team runs: called by the agents of a run, from their terminals
+
+    def _team_call(fn, *args):
+        try:
+            return fn(*args)
+        except (NotFound, Conflict) as exc:
+            raise ToolError(str(exc)) from exc
+
+    @server.tool(
+        name="team_board",
+        description=(
+            "Team run board: the user's request, the approved plan, every task with its status, "
+            "the team members with their branches and worktrees, and your recent messages. "
+            "Use run_id and agent ('claude' or 'agy') from your team prompt."
+        ),
+    )
+    def team_board(run_id: int, agent: Literal["claude", "agy"]) -> dict[str, Any]:
+        return _team_call(team.board, run_id, agent)
+
+    @server.tool(
+        name="team_task",
+        description=(
+            "Update one of your tasks in a team run: status 'doing' when you start it, 'done' when it is "
+            "finished and checked, 'blocked' when you cannot continue. The summary says what you did or what "
+            "blocks you. Marking a task done tells the other agent if their tasks depend on it."
+        ),
+    )
+    def team_task(run_id: int, agent: Literal["claude", "agy"], task: int,
+                  status: Literal["doing", "done", "blocked", "todo"], summary: str | None = None) -> dict[str, Any]:
+        return _team_call(team.update_task, run_id, agent, task, status, summary)
+
+    @server.tool(
+        name="team_message",
+        description=(
+            "Send a message to the other agent of your team run (it is typed into their terminal) "
+            "or to the user (shown in the dashboard). to: 'claude', 'agy' or 'user'."
+        ),
+    )
+    def team_message(run_id: int, agent: Literal["claude", "agy"], to: Literal["claude", "agy", "user"],
+                     text: str) -> dict[str, Any]:
+        return _team_call(team.post_message, run_id, agent, to, text)
+
+    @server.tool(
+        name="team_done",
+        description=(
+            "Declare that your part of the team run is finished: all your tasks must be 'done'. "
+            "When every agent is done, Project OS merges the branches and reviews the result."
+        ),
+    )
+    def team_done(run_id: int, agent: Literal["claude", "agy"], summary: str) -> dict[str, Any]:
+        return _team_call(team.agent_done, run_id, agent, summary)
 
     return server, db
 

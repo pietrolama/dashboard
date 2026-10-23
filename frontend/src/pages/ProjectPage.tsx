@@ -4,6 +4,7 @@ import { api, type GitState, type Lifecycle, type Phase, type ProjectDetail } fr
 import { Chip, Empty, ErrorBox, Field, HealthBadge, Panel } from "../components";
 import { DecisionsPanel, ResumePanel, SessionsPanel } from "../memory";
 import { ResumeDialog } from "../resume";
+import { TeamPanel } from "../team";
 import { describeEvent, formatDate, HEALTH_HINT, LIFECYCLE_LABEL, PHASE_LABEL, PRIORITY_LABEL, relativeTime, useAsync } from "../util";
 
 const SOURCE_LABEL: Record<string, string> = { git: "Git", readme: "README", filesystem: "Filesystem" };
@@ -75,6 +76,8 @@ export default function ProjectPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0 space-y-6">
+          <TeamPanel project={p} onChange={reload} />
+
           <ResumePanel project={p} onChange={reload} />
 
           <DecisionsPanel project={p} onChange={reload} />

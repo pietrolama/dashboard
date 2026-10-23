@@ -160,6 +160,85 @@ export interface ResumeExport {
   };
 }
 
+export type TeamAgent = "claude" | "agy";
+export type TeamRunStatus =
+  | "planning"
+  | "plan_ready"
+  | "running"
+  | "integrating"
+  | "conflict"
+  | "review"
+  | "applied"
+  | "discarded"
+  | "failed";
+
+export interface TeamTask {
+  id: number;
+  number: number;
+  agent: TeamAgent;
+  title: string;
+  details: string | null;
+  depends_on: number[];
+  status: "todo" | "doing" | "done" | "blocked";
+  summary: string | null;
+}
+
+export interface TeamMember {
+  agent: TeamAgent;
+  worktree: string;
+  branch: string;
+  pane: string | null;
+  status: "working" | "done";
+  summary: string | null;
+  // The agent's terminal shows a question (folder trust, a permission) and waits for the user.
+  waiting: boolean;
+}
+
+export interface TeamMessage {
+  id: number;
+  sender: TeamAgent | "user";
+  recipient: TeamAgent | "user" | "team";
+  body: string;
+  created_at: string;
+}
+
+export interface TeamRunSummary {
+  id: number;
+  request: string;
+  status: TeamRunStatus;
+  created_at: string;
+  updated_at: string;
+  task_count: number;
+  done_count: number;
+}
+
+export interface TeamRun extends Omit<TeamRunSummary, "task_count" | "done_count"> {
+  project_slug: string;
+  repo_path: string;
+  base_branch: string | null;
+  base_commit: string;
+  plan_summary: string | null;
+  tmux_session: string | null;
+  diffstat: string | null;
+  review: string | null;
+  error: string | null;
+  tasks: TeamTask[];
+  members: TeamMember[];
+  messages: TeamMessage[];
+  session_alive: boolean;
+  attach_command: string | null;
+  integration_worktree: string;
+  claude_trusted: boolean | null;
+}
+
+export interface TeamTaskDraft {
+  ref: number;
+  agent: TeamAgent;
+  title: string;
+  details: string | null;
+  depends_on: number[];
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -214,6 +293,18 @@ export const api = {
   exportResume: (slug: string, mode: ResumeMode) =>
     request<ResumeExport>("POST", `/projects/${encodeURIComponent(slug)}/resume`, { mode }),
   resumeZipUrl: (slug: string, briefId: string) => `/api/projects/${encodeURIComponent(slug)}/resume/${briefId}.zip`,
+  teamRuns: (slug: string) => request<TeamRunSummary[]>("GET", `/projects/${encodeURIComponent(slug)}/team-runs`),
+  createTeamRun: (slug: string, req: string) =>
+    request<TeamRun>("POST", `/projects/${encodeURIComponent(slug)}/team-runs`, { request: req }),
+  teamRun: (id: number) => request<TeamRun>("GET", `/team-runs/${id}`),
+  updateTeamPlan: (id: number, tasks: TeamTaskDraft[], summary?: string | null) =>
+    request<TeamRun>("PUT", `/team-runs/${id}/plan`, { tasks, summary }),
+  replanTeamRun: (id: number, req?: string) => request<TeamRun>("POST", `/team-runs/${id}/replan`, { request: req }),
+  teamAction: (id: number, action: "start" | "finish" | "retry" | "apply" | "discard") =>
+    request<TeamRun>("POST", `/team-runs/${id}/${action}`),
+  openTeamTerminal: (id: number) => request<{ opened: boolean }>("POST", `/team-runs/${id}/terminal`),
+  sendTeamMessage: (id: number, to: TeamAgent, text: string) =>
+    request<{ delivered: boolean }>("POST", `/team-runs/${id}/messages`, { to, text }),
   events: (limit = 30) => request<ProjectEvent[]>("GET", `/events?limit=${limit}`),
   roots: () => request<Root[]>("GET", "/roots"),
   addRoot: (path: string, max_depth: number) => request<Root>("POST", "/roots", { path, max_depth }),

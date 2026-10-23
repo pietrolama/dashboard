@@ -136,6 +136,65 @@ MIGRATIONS: list[str] = [
         created_at  TEXT NOT NULL
     );
     """,
+    # 4 — Team runs: Claude Code and Antigravity working on one request
+    """
+    CREATE TABLE team_runs (
+        id             INTEGER PRIMARY KEY,
+        project_id     INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        request        TEXT NOT NULL,
+        status         TEXT NOT NULL CHECK (status IN
+                       ('planning', 'plan_ready', 'running', 'integrating', 'conflict',
+                        'review', 'applied', 'discarded', 'failed')),
+        repo_path      TEXT NOT NULL,
+        base_branch    TEXT,
+        base_commit    TEXT NOT NULL,
+        plan_summary   TEXT,
+        tmux_session   TEXT,
+        diffstat       TEXT,
+        review         TEXT,
+        error          TEXT,
+        created_at     TEXT NOT NULL,
+        updated_at     TEXT NOT NULL
+    );
+    CREATE INDEX team_runs_by_project ON team_runs (project_id, id DESC);
+
+    -- One row per agent taking part in a run, created when the run starts.
+    CREATE TABLE team_members (
+        run_id    INTEGER NOT NULL REFERENCES team_runs(id) ON DELETE CASCADE,
+        agent     TEXT NOT NULL CHECK (agent IN ('claude', 'agy')),
+        worktree  TEXT NOT NULL,
+        branch    TEXT NOT NULL,
+        pane      TEXT,
+        status    TEXT NOT NULL DEFAULT 'working' CHECK (status IN ('working', 'done')),
+        summary   TEXT,
+        PRIMARY KEY (run_id, agent)
+    );
+
+    CREATE TABLE team_tasks (
+        id               INTEGER PRIMARY KEY,
+        run_id           INTEGER NOT NULL REFERENCES team_runs(id) ON DELETE CASCADE,
+        position         INTEGER NOT NULL,
+        agent            TEXT NOT NULL CHECK (agent IN ('claude', 'agy')),
+        title            TEXT NOT NULL,
+        details          TEXT,
+        -- task ids of the same run
+        depends_on_json  TEXT NOT NULL DEFAULT '[]',
+        status           TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'doing', 'done', 'blocked')),
+        summary          TEXT,
+        updated_at       TEXT NOT NULL
+    );
+    CREATE INDEX team_tasks_by_run ON team_tasks (run_id, position);
+
+    CREATE TABLE team_messages (
+        id          INTEGER PRIMARY KEY,
+        run_id      INTEGER NOT NULL REFERENCES team_runs(id) ON DELETE CASCADE,
+        sender      TEXT NOT NULL,
+        recipient   TEXT NOT NULL,
+        body        TEXT NOT NULL,
+        created_at  TEXT NOT NULL
+    );
+    CREATE INDEX team_messages_by_run ON team_messages (run_id, id);
+    """,
 ]
 
 

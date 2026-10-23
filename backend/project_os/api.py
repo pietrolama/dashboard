@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from . import resume
 from .config import Settings
+from .team import Team
 from .db import Database
 from .registry import Conflict, NotFound, Registry
 
@@ -75,6 +76,33 @@ class ResumeIn(BaseModel):
     mode: ResumeMode = "implementation_within_scope"
 
 
+class TeamRunIn(BaseModel):
+    request: str = Field(min_length=1, max_length=20000)
+
+
+class TeamTaskIn(BaseModel):
+    # Any number the depends_on of the other tasks refer to (the task's number in the plan shown).
+    ref: int | None = None
+    agent: Literal["claude", "agy"]
+    title: str = Field(min_length=1, max_length=300)
+    details: str | None = Field(None, max_length=20000)
+    depends_on: list[int] = Field(default_factory=list, max_length=50)
+
+
+class TeamPlanIn(BaseModel):
+    summary: str | None = Field(None, max_length=5000)
+    tasks: list[TeamTaskIn] = Field(min_length=1, max_length=50)
+
+
+class ReplanIn(BaseModel):
+    request: str | None = Field(None, max_length=20000)
+
+
+class TeamMessageIn(BaseModel):
+    to: Literal["claude", "agy"]
+    text: str = Field(min_length=1, max_length=5000)
+
+
 class RootIn(BaseModel):
     path: str
     max_depth: int = Field(3, ge=1, le=6)
@@ -107,6 +135,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     db = Database(settings.db_path)
     registry = Registry(db)
     memory = registry.memory
+    team = Team(db, settings, registry)
+    team_busy: set[int] = set()
 
     async def scheduler() -> None:
         while True:
@@ -118,13 +148,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except Exception:
                 log.exception("scheduled scan failed")
 
+    async def team_job(run_id: int, kind: str) -> None:
+        try:
+            await asyncio.to_thread(team.plan if kind == "plan" else team.integrate, run_id)
+        except Exception:
+            log.exception("team run #%s: %s failed", run_id, kind)
+        finally:
+            team_busy.discard(run_id)
+
+    async def team_loop() -> None:
+        # Planning and integration are started here, not in the request that
+        # asks for them: an agent finishing its part reaches us through the
+        # MCP server, which is another process.
+        jobs: set[asyncio.Task] = set()
+        while True:
+            try:
+                for run_id, kind in team.pending_jobs():
+                    if run_id not in team_busy:
+                        team_busy.add(run_id)
+                        job = asyncio.create_task(team_job(run_id, kind))
+                        jobs.add(job)
+                        job.add_done_callback(jobs.discard)
+                await asyncio.to_thread(team.resend_unsent)
+            except Exception:
+                log.exception("team loop failed")
+            await asyncio.sleep(2)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        task = None
+        tasks = [asyncio.create_task(team_loop())]
         if settings.scan_interval_s > 0:
-            task = asyncio.create_task(scheduler())
+            tasks.append(asyncio.create_task(scheduler()))
         yield
-        if task:
+        for task in tasks:
             task.cancel()
         db.close()
 
@@ -229,6 +285,60 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 zf.write(f, f"{slug}-{brief_id}/{f.name}")
         return Response(buf.getvalue(), media_type="application/zip",
                         headers={"Content-Disposition": f'attachment; filename="{slug}-{brief_id}.zip"'})
+
+    # ---- team runs (Claude Code + Antigravity)
+
+    @app.get("/api/projects/{slug}/team-runs")
+    def list_team_runs(slug: str):
+        return team.list_runs(registry.resolve(slug))
+
+    @app.post("/api/projects/{slug}/team-runs", status_code=201)
+    def create_team_run(slug: str, body: TeamRunIn):
+        project = registry.get_project_by_slug(slug)
+        repos = [r for r in project["repositories"] if r["vcs"] == "git" and not r["missing_since"]]
+        if not repos:
+            raise Conflict("this project has no Git repository on disk")
+        return team.create_run(project["id"], repos[0]["path"], body.request)
+
+    @app.get("/api/team-runs/{run_id}")
+    def get_team_run(run_id: int):
+        return team.get_run(run_id)
+
+    @app.put("/api/team-runs/{run_id}/plan")
+    def update_team_plan(run_id: int, body: TeamPlanIn):
+        return team.update_plan(run_id, [t.model_dump() for t in body.tasks], body.summary)
+
+    @app.post("/api/team-runs/{run_id}/replan")
+    def replan_team_run(run_id: int, body: ReplanIn):
+        return team.replan(run_id, body.request)
+
+    @app.post("/api/team-runs/{run_id}/start")
+    def start_team_run(run_id: int):
+        return team.start(run_id)
+
+    @app.post("/api/team-runs/{run_id}/terminal")
+    def open_team_terminal(run_id: int):
+        return {"opened": team.open_terminal(run_id)}
+
+    @app.post("/api/team-runs/{run_id}/messages", status_code=201)
+    def send_team_message(run_id: int, body: TeamMessageIn):
+        return team.post_message(run_id, "user", body.to, body.text)
+
+    @app.post("/api/team-runs/{run_id}/finish")
+    def finish_team_run(run_id: int):
+        return team.finish_now(run_id)
+
+    @app.post("/api/team-runs/{run_id}/retry")
+    def retry_team_integration(run_id: int):
+        return team.retry_integration(run_id)
+
+    @app.post("/api/team-runs/{run_id}/apply")
+    def apply_team_run(run_id: int):
+        return team.apply(run_id)
+
+    @app.post("/api/team-runs/{run_id}/discard")
+    def discard_team_run(run_id: int):
+        return team.discard(run_id)
 
     @app.get("/api/events")
     def list_events(limit: int = Query(100, ge=1, le=500)):

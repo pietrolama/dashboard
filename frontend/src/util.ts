@@ -96,6 +96,18 @@ export function describeEvent(e: ProjectEvent): string {
       return p.next_step ? `Sessione chiusa → ${p.next_step}` : `Sessione chiusa: ${p.goal}`;
     case "session_edited":
       return "Note di sessione corrette";
+    case "team_run_created":
+      return `Team: richiesta «${p.request}»`;
+    case "team_run_started":
+      return `Team run #${p.run} avviato`;
+    case "team_run_review":
+      return `Team run #${p.run} pronto per la revisione`;
+    case "team_run_applied":
+      return `Team run #${p.run} applicato`;
+    case "team_run_discarded":
+      return `Team run #${p.run} scartato`;
+    case "team_run_failed":
+      return `Team run #${p.run} non riuscito`;
     case "brief_exported":
       return `Briefing esportato (${p.freshness})`;
     default:
