@@ -82,11 +82,26 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("resume-check", help="verify a bundle and report what changed since")
     check.add_argument("bundle", help="bundle directory, e.g. …/exports/<slug>/latest")
 
+    arun = sub.add_parser("agent-run", help="run claude or agy once, non-interactively, and print a normalized result")
+    arun.add_argument("agent", choices=("claude", "agy"))
+    arun.add_argument("prompt")
+    where = arun.add_mutually_exclusive_group(required=True)
+    where.add_argument("--project", help="project slug: runs in its repository")
+    where.add_argument("--cwd", help="directory to run in")
+    arun.add_argument("--mode", choices=("read", "edit"), default="read",
+                      help="read: plan mode, no file changes; edit: may edit files without asking")
+    arun.add_argument("--timeout", type=int, default=600, help="seconds before the agent is stopped")
+    arun.add_argument("--model")
+    arun.add_argument("--raw", action="store_true", help="include the CLI's own JSON output")
+
     args = parser.parse_args(argv)
     settings = Settings.from_env()
 
     if args.command == "resume-check":
         return _resume_check(Path(args.bundle))
+
+    if args.command == "agent-run" and args.cwd:
+        return _agent_run(args, Path(args.cwd))
 
     if args.command == "serve":
         import uvicorn
@@ -132,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Removed {args.pattern}")
         elif args.command == "resume":
             return _resume(args, registry, settings)
+        elif args.command == "agent-run":
+            return _agent_run(args, _project_path(registry, args.project))
         else:
             return _memory_command(args, registry)
     except (Conflict, NotFound) as exc:
@@ -177,6 +194,29 @@ def _memory_command(args: argparse.Namespace, registry: Registry) -> int:
             marker = "!" if d["status"] == "review" else "-"
             print(f"  {marker} [{d['kind']}] {d['title']}")
     return 0
+
+
+def _project_path(registry: Registry, slug: str) -> Path:
+    repos = [r for r in registry.get_project_by_slug(slug)["repositories"] if not r["missing_since"]]
+    if not repos:
+        raise NotFound(f"no repository on disk for project {slug}")
+    return Path(repos[0]["path"])
+
+
+def _agent_run(args: argparse.Namespace, cwd: Path) -> int:
+    """Exit 0 on success, 1 on error, 2 on timeout."""
+    from . import agents
+
+    try:
+        result = agents.run(args.agent, args.prompt, cwd, args.mode, args.timeout, args.model)
+    except agents.AgentError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    payload = result.to_payload()
+    if not args.raw:
+        payload.pop("raw")
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return {"success": 0, "timeout": 2}.get(result.status, 1)
 
 
 def _resume(args: argparse.Namespace, registry: Registry, settings: Settings) -> int:
