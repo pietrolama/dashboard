@@ -634,7 +634,7 @@ class Team:
     def agent_done(self, run_id: int, agent: str, summary: str) -> dict:
         self._require_running(run_id)
         self._member(run_id, agent)
-        open_tasks = [f"#{t['number']}" for t in self._tasks(run_id) if t["agent"] == agent and t["status"] != "done"]
+        open_tasks = [f"#{t['number']}" for t in self._tasks(run_id) if t["agent"] == agent and t["status"] not in ("done", "blocked")]
         if open_tasks:
             raise Conflict(f"mark these tasks done (or blocked, telling the user) first: {', '.join(open_tasks)}")
         with self.db.transaction() as c:
@@ -734,9 +734,11 @@ class Team:
         if merged.returncode != 0:
             _git(repo, "reset", "--merge", check=False)
             raise Conflict(f"merge failed, nothing was changed: {(merged.stderr or merged.stdout).strip()[:300]}")
-        tasks = "\n".join(f"- #{t['number']} [{t['agent']}] {t['title']}" for t in self._tasks(run_id))
-        message = f"Team run #{run_id}: {run['request'].splitlines()[0][:72]}\n\n{run['request']}\n\n{tasks}\n"
-        _git(repo, *_identity(repo), "commit", "-q", "-F", "-", input=message)
+        # A run that changed nothing has nothing to commit, but it is still applied.
+        if _git(repo, "diff", "--cached", "--quiet", check=False).returncode != 0:
+            tasks = "\n".join(f"- #{t['number']} [{t['agent']}] {t['title']}" for t in self._tasks(run_id))
+            message = f"Team run #{run_id}: {run['request'].splitlines()[0][:72]}\n\n{run['request']}\n\n{tasks}\n"
+            _git(repo, *_identity(repo), "commit", "-q", "-F", "-", input=message)
         self._cleanup(run)
         self._set(run_id, source, "team_run_applied", status="applied")
         return self.get_run(run_id)

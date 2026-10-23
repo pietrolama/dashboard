@@ -13,6 +13,9 @@ export default function ProjectPage() {
   const { slug = "" } = useParams();
   const { data: p, error, loading, setData, reload } = useAsync(() => api.project(slug), [slug]);
   const [saveError, setSaveError] = useState<Error | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<Error | null>(null);
   const [resumeOpen, setResumeOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -30,11 +33,15 @@ export default function ProjectPage() {
 
   async function remove() {
     if (!p) return;
+    setDeleting(true);
+    setDeleteError(null);
     try {
       await api.deleteProject(slug);
       navigate("/");
     } catch (e) {
-      setSaveError(e as Error);
+      setDeleteError(e as Error);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -179,9 +186,38 @@ export default function ProjectPage() {
           </Panel>
 
           {canDelete && (
-            <button className="btn w-full justify-center text-danger" onClick={remove}>
-              Rimuovi dal registro
-            </button>
+            <div className="space-y-2">
+              {confirmingDelete ? (
+                <div className="flex gap-2">
+                  <button
+                    className="btn text-danger flex-1 justify-center"
+                    onClick={remove}
+                    disabled={deleting}
+                  >
+                    Conferma eliminazione
+                  </button>
+                  <button
+                    className="btn flex-1 justify-center"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                  >
+                    Annulla
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="btn w-full justify-center text-danger"
+                  onClick={() => {
+                    setConfirmingDelete(true);
+                    setDeleteError(null);
+                  }}
+                  disabled={deleting}
+                >
+                  Rimuovi dal registro
+                </button>
+              )}
+              <ErrorBox error={deleteError} />
+            </div>
           )}
         </aside>
       </div>

@@ -240,6 +240,18 @@ def test_one_open_run_per_project(setup, fake):
         team.create_run(pid, repo, "altro")
 
 
+def test_blocked_tasks_let_the_agent_finish(setup, fake):
+    team, pid, repo = setup
+    rid = planned(team, pid, repo)["id"]
+    team.start(rid)
+    team.update_task(rid, "claude", 1, "doing")
+    with pytest.raises(Conflict, match="#1"):
+        team.agent_done(rid, "claude", "fatto")
+    team.update_task(rid, "claude", 1, "blocked", "manca una dipendenza")
+    assert team.agent_done(rid, "claude", "bloccato su #1")["team_finished"] is False
+    assert {m["agent"]: m["status"] for m in team.get_run(rid)["members"]}["claude"] == "done"
+
+
 def test_apply_refuses_a_dirty_project(setup, fake):
     team, pid, repo = setup
     rid = planned(team, pid, repo)["id"]
@@ -250,6 +262,21 @@ def test_apply_refuses_a_dirty_project(setup, fake):
     with pytest.raises(Conflict, match="uncommitted"):
         team.apply(rid)
     assert team.get_run(rid)["status"] == "review"
+
+
+def test_apply_without_changes_closes_the_run(setup, fake):
+    team, pid, repo = setup
+    rid = planned(team, pid, repo)["id"]
+    team.start(rid)
+    team.finish_now(rid)
+    team.integrate(rid)
+    assert team.get_run(rid)["status"] == "review"
+    head = lambda: subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                                  capture_output=True, text=True, check=True).stdout.strip()
+    before = head()
+    assert team.apply(rid)["status"] == "applied"
+    assert head() == before
+    assert not {b for b in branches(repo) if b.startswith("team/")}
 
 
 def test_edited_plan_keeps_dependencies_by_ref(setup, fake):
