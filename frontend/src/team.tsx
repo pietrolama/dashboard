@@ -426,13 +426,20 @@ function Review({ run, busy, act }: { run: TeamRun; busy: boolean; act: Act }) {
           <div className="whitespace-pre-wrap rounded-md border border-line p-3 text-sm">{run.review}</div>
         </div>
       )}
-      <p className="text-xs text-muted">
+      <p className={`text-xs text-muted ${run.diffstat ? "" : "hidden"}`}>
         Il risultato è sul branch <code>team/{run.id}</code>, nel worktree <code>{run.integration_worktree}</code>: puoi provarlo lì prima di
         applicarlo.
       </p>
-      <button className="btn btn-primary" disabled={busy || !run.diffstat} onClick={() => act(() => api.teamAction(run.id, "apply"))}>
-        Applica a {run.base_branch ?? "branch"}
-      </button>
+      {run.diffstat ? (
+        <button className="btn btn-primary" disabled={busy} onClick={() => act(() => api.teamAction(run.id, "apply"))}>
+          Applica a {run.base_branch ?? "branch"}
+        </button>
+      ) : (
+        <p className="text-sm">
+          Nessuna modifica da applicare. Chiudi la run con <b>Scarta</b>: i report restano qui sotto, e la prossima run li riceve, così puoi
+          chiedere al team di metterli in pratica.
+        </p>
+      )}
     </div>
   );
 }

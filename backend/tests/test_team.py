@@ -221,6 +221,18 @@ def test_planner_failure_marks_the_run_failed(setup, fake):
     assert team.get_run(run["id"])["status"] == "plan_ready"
 
 
+def test_planner_sees_the_previous_run(setup, fake):
+    team, pid, repo = setup
+    first = planned(team, pid, repo)["id"]
+    team.start(first)
+    team.post_message(first, "claude", "user", "REPORT: manca la gestione degli errori in api.py")
+    team.discard(first)
+    planned(team, pid, repo)
+    prompt = fake.prompts[-1][0]
+    assert f"Previous team run on this project (#{first}, discarded)" in prompt
+    assert "REPORT: manca la gestione degli errori in api.py" in prompt
+
+
 def test_one_open_run_per_project(setup, fake):
     team, pid, repo = setup
     planned(team, pid, repo)

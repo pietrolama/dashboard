@@ -67,7 +67,7 @@ worktree of this repository, and their branches will then be merged.
 
 {brief}
 
-# User request
+{previous}# User request
 
 {request}
 
@@ -358,7 +358,7 @@ class Team:
                 brief = resume.build_brief(self.registry, run["project_id"], "analysis_only").markdown
             except Exception as exc:  # the brief is context, not a requirement
                 brief = f"{run['project_name']} (brief unavailable: {exc})"
-        prompt = PLAN_PROMPT.format(brief=brief, request=run["request"])
+        prompt = PLAN_PROMPT.format(brief=brief, previous=self._previous_run(run), request=run["request"])
         try:
             result = agents.run("claude", prompt, run["repo_path"], mode="read", timeout_s=PLAN_TIMEOUT_S)
             if not result.ok:
@@ -376,6 +376,30 @@ class Team:
             self._replace_tasks(run_id, tasks)
             self._set(run_id, status="plan_ready", plan_summary=str(data.get("summary") or "").strip() or None,
                       error=None)
+
+    def _previous_run(self, run: dict) -> str:
+        """The outcome of the project's last team run, so a request can build on it
+        (for example: apply what the previous analysis found)."""
+        prev = self.db.query_one(
+            "SELECT * FROM team_runs WHERE project_id = ? AND id < ? ORDER BY id DESC LIMIT 1",
+            (run["project_id"], run["id"]),
+        )
+        if not prev:
+            return ""
+        parts = [f"# Previous team run on this project (#{prev['id']}, {prev['status']})\n",
+                 f"Request: {prev['request']}\n"]
+        if prev["plan_summary"]:
+            parts.append(f"Plan: {prev['plan_summary']}\n")
+        for m in self._members(prev["id"]):
+            if m["summary"]:
+                parts.append(f"{m['agent']} finished with: {m['summary']}\n")
+        reports = self.db.query(
+            "SELECT sender, body FROM team_messages WHERE run_id = ? AND recipient = 'user' ORDER BY id", (prev["id"],))
+        for r in reports:
+            parts.append(f"Report from {r['sender']} to the user:\n{r['body']}\n")
+        if prev["review"]:
+            parts.append(f"Final review: {prev['review']}\n")
+        return "\n".join(parts) + "\n"
 
     def _replace_tasks(self, run_id: int, tasks: list[dict]) -> None:
         now = utcnow()
