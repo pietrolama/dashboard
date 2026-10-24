@@ -7,6 +7,7 @@ Dashboard locale di tutti i tuoi progetti. Milestone completate:
 3. **Riprendi progetto**: briefing portabile nel formato Project Resume Protocol (PRP 1.0) per Claude Code e altri dev agent.
 4. **Team**: Claude Code e Antigravity lavorano insieme su una richiesta, ciascuno nel proprio terminale e branch.
 5. **Mappa delle relazioni**: vista radiale dei legami tra progetti, dichiarati o osservati dai repository.
+6. **Analisi AI**: Antigravity legge ciò che è dichiarato, Claude lo verifica nel codice; contraddizioni e proposte aspettano la tua approvazione.
 
 ## Avvio
 
@@ -128,9 +129,20 @@ Da riga di comando, `project_os agent-run claude|agy "prompt" --project <slug>` 
 - **Dichiarate** (tu o un agente, dalla scheda progetto, dalla mappa o col tool MCP `link_projects`): *dipende da*, *fa parte di*, *è l'evoluzione di*, *collegato a*. Ogni aggiunta o rimozione va nella cronologia di entrambi i progetti.
 - **Osservate** (calcolate a ogni lettura, mai salvate): due progetti con lo stesso remote Git, una cartella-progetto dentro un'altra. Sulla mappa sono tratteggiate.
 
+## Analisi AI
+
+Dalla scheda di un progetto, **Analizza** confronta lo stato dichiarato con il codice. Il lavoro è diviso così che nessuno rilegga ciò che ha già letto l'altro:
+
+1. **Lettura** (Antigravity, sola lettura): stato dichiarato in Project OS, README e documentazione, mai il codice sorgente. Ne escono una sintesi e un elenco di affermazioni verificabili.
+2. **Verifica** (Claude, sola lettura): ogni affermazione viene controllata nel codice e negli ultimi 30 commit, ed è *confermata*, *contraddetta* o *non verificabile*, con i file o i commit su cui si basa. Claude può anche proporre modifiche allo stato dichiarato: prossimo passo, fase, ciclo di vita, descrizione, una decisione non registrata, una relazione con un altro progetto.
+
+Project OS unisce le due risposte senza un terzo agente. Nulla cambia da solo: ogni contraddizione si segna *risolta* o *ignorata*, ogni proposta si *accetta* (e viene applicata) o si *ignora*. Se Antigravity non è disponibile o fallisce, la lettura la fa Claude.
+
+L'analisi parte solo quando la chiedi, perché costa token, e non riparte se codice, README e stato dichiarato non sono cambiati dall'ultima (si può forzare). Viene salvata come evidenza `agent_analysis`: compare nel contesto MCP (`get_project_context`, `get_project_analysis`) e nel briefing PRP come inferenza `ai`, mai come fatto verificato. Un'analisi fatta su un commit precedente è segnata come *superata*.
+
 ## Server MCP
 
-`project_os mcp` espone Project OS agli agenti su stdio (SDK MCP ufficiale). Tool: `list_projects`, `get_project_context`, `get_project_memory`, `record_decision`, `log_work_session`, `preview_resume`, `export_resume`, `scan_projects`, `link_projects` e, per i team run, `team_board`, `team_task`, `team_message`, `team_done`. Le voci scritte da un agente hanno `source = agent`; `scan_projects` lavora solo sulle sorgenti già registrate.
+`project_os mcp` espone Project OS agli agenti su stdio (SDK MCP ufficiale). Tool: `list_projects`, `get_project_context`, `get_project_memory`, `record_decision`, `log_work_session`, `preview_resume`, `export_resume`, `scan_projects`, `link_projects`, `get_project_analysis` e, per i team run, `team_board`, `team_task`, `team_message`, `team_done`. Le voci scritte da un agente hanno `source = agent`; `scan_projects` lavora solo sulle sorgenti già registrate.
 
 Per Claude Code:
 
@@ -146,4 +158,4 @@ cd backend && ../.venv/bin/python -m pytest
 
 ## Prossime milestone
 
-Dalla roadmap: analisi AI opzionale (sintesi e contraddizioni, salvate come evidenze `agent_analysis`).
+Le milestone della roadmap iniziale sono completate.

@@ -128,6 +128,16 @@ export function describeEvent(e: ProjectEvent): string {
       return `Team run #${p.run} scartato`;
     case "team_run_failed":
       return `Team run #${p.run} non riuscito`;
+    case "analysis_requested":
+      return `Analisi AI #${p.analysis} richiesta`;
+    case "analysis_done":
+      return `Analisi AI #${p.analysis} completata`;
+    case "analysis_failed":
+      return `Analisi AI #${p.analysis} non riuscita`;
+    case "finding_accepted":
+      return `Analisi AI: accettato «${p.text}»`;
+    case "finding_dismissed":
+      return `Analisi AI: ignorato «${p.text}»`;
     case "link_added":
       return `Relazione: ${p.from} ${LINK_LABEL[p.kind as LinkKind] ?? p.kind} ${p.to}`;
     case "link_removed":

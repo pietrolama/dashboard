@@ -14,6 +14,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from . import resume
+from .analysis import Analysis
 from .team import Team
 from .config import Settings
 from .db import Database
@@ -50,6 +51,7 @@ def create_mcp_server(settings: Settings | None = None, db: Database | None = No
     db = db or Database(settings.db_path)
     registry = Registry(db)
     team = Team(db, settings)
+    analysis = Analysis(db, registry)
 
     server = MCPServer(
         name="project-os",
@@ -138,6 +140,21 @@ def create_mcp_server(settings: Settings | None = None, db: Database | None = No
                 supersedes_id=supersedes_id,
                 source=AGENT_SOURCE,
             )
+        except (NotFound, Conflict) as exc:
+            raise ToolError(str(exc)) from exc
+
+    @server.tool(
+        name="get_project_analysis",
+        description=(
+            "Get the latest AI analysis of a project: a summary, the declared claims checked against "
+            "the code (confirmed, contradiction, unverifiable) and suggested changes, each with its "
+            "status (open, accepted, dismissed). 'current' is false when the project changed since."
+        ),
+    )
+    def get_project_analysis(project: str) -> dict[str, Any] | None:
+        project_id = _resolve_project_id(registry, project)
+        try:
+            return analysis.latest(project_id)
         except (NotFound, Conflict) as exc:
             raise ToolError(str(exc)) from exc
 

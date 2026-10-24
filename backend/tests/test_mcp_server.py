@@ -60,6 +60,7 @@ async def test_server_init_and_close(tmp_path: Path):
         "export_resume",
         "scan_projects",
         "link_projects",
+        "get_project_analysis",
     }
     assert expected.issubset(tool_names)
     database.close()

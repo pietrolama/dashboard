@@ -133,6 +133,58 @@ export interface RelationGraph {
   relations: Relation[];
 }
 
+export type AnalysisStatus = "queued" | "running" | "done" | "failed";
+export type FindingKind = "confirmed" | "contradiction" | "unverifiable" | "suggestion";
+
+/** What accepting a suggestion changes in the declared state. */
+export type FindingAction =
+  | { type: "next_step" | "description"; value: string }
+  | { type: "phase"; value: Phase }
+  | { type: "lifecycle"; value: Lifecycle }
+  | { type: "decision"; kind: DecisionKind; title: string; rationale: string | null }
+  | { type: "link"; target: string; kind: LinkKind; note: string | null };
+
+export interface Finding {
+  id: number;
+  analysis_id: number;
+  position: number;
+  kind: FindingKind;
+  text: string;
+  detail: string | null;
+  source: string | null;
+  refs: string[];
+  action: FindingAction | null;
+  status: "open" | "accepted" | "dismissed";
+  resolved_at: string | null;
+}
+
+export interface AnalysisStep {
+  agent: TeamAgent;
+  role: "extract" | "verify";
+  status: "running" | "success" | "error" | "timeout";
+  duration_s?: number;
+  tokens?: { input: number | null; output: number | null };
+  cost_usd?: number | null;
+  error?: string;
+  fallback?: TeamAgent;
+}
+
+export interface Analysis {
+  id: number;
+  project_id: number;
+  project_slug: string;
+  status: AnalysisStatus;
+  head_commit: string | null;
+  summary: string | null;
+  error: string | null;
+  steps: AnalysisStep[];
+  created_at: string;
+  finished_at: string | null;
+  findings: Finding[];
+  /** Only on the latest analysis: false when the project changed since. */
+  current?: boolean;
+}
+
 export interface ProjectDetail extends Project {
   evidence: Record<string, Evidence>;
   events: ProjectEvent[];
@@ -318,6 +370,11 @@ export const api = {
   ) => request<Decision>("POST", `/projects/${encodeURIComponent(slug)}/decisions`, body),
   updateDecision: (id: number, body: Partial<Pick<Decision, "title" | "rationale" | "alternatives" | "kind">> & { status?: "active" | "review" }) =>
     request<Decision>("PATCH", `/decisions/${id}`, body),
+  analysis: (slug: string) => request<Analysis | null>("GET", `/projects/${encodeURIComponent(slug)}/analysis`),
+  requestAnalysis: (slug: string, force = false) =>
+    request<Analysis>("POST", `/projects/${encodeURIComponent(slug)}/analyses`, { force }),
+  getAnalysis: (id: number) => request<Analysis>("GET", `/analyses/${id}`),
+  resolveFinding: (id: number, accept: boolean) => request<Finding>("POST", `/findings/${id}/${accept ? "accept" : "dismiss"}`),
   relations: () => request<RelationGraph>("GET", "/relations"),
   addLink: (slug: string, body: { target: string; kind: LinkKind; note?: string | null }) =>
     request<Relation>("POST", `/projects/${encodeURIComponent(slug)}/links`, body),

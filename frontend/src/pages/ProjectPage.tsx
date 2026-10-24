@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type GitState, type Lifecycle, type Phase, type ProjectDetail } from "../api";
 import { Chip, Empty, ErrorBox, Field, HealthBadge, Panel } from "../components";
+import { AnalysisPanel } from "../analysis";
 import { DecisionsPanel, ResumePanel, SessionsPanel } from "../memory";
 import { RelationsPanel } from "../relations";
 import { ResumeDialog } from "../resume";
@@ -87,6 +88,8 @@ export default function ProjectPage() {
           <TeamPanel project={p} onChange={reload} />
 
           <ResumePanel project={p} onChange={reload} />
+
+          <AnalysisPanel project={p} onChange={reload} />
 
           <DecisionsPanel project={p} onChange={reload} />
 

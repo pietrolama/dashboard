@@ -209,6 +209,40 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX project_links_by_target ON project_links (target_id);
     """,
+    # 6 — AI analysis: agy reads what is declared, claude checks it against the code
+    """
+    CREATE TABLE analyses (
+        id           INTEGER PRIMARY KEY,
+        project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        status       TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
+        -- What the analysis looked at (declared state, README, HEAD): an
+        -- unchanged hash means a new analysis would read the same input.
+        input_hash   TEXT NOT NULL,
+        head_commit  TEXT,
+        summary      TEXT,
+        error        TEXT,
+        steps_json   TEXT NOT NULL DEFAULT '[]',
+        created_at   TEXT NOT NULL,
+        finished_at  TEXT
+    );
+    CREATE INDEX analyses_by_project ON analyses (project_id, id DESC);
+    CREATE UNIQUE INDEX one_open_analysis ON analyses (project_id) WHERE status IN ('queued', 'running');
+
+    CREATE TABLE analysis_findings (
+        id           INTEGER PRIMARY KEY,
+        analysis_id  INTEGER NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+        position     INTEGER NOT NULL,
+        kind         TEXT NOT NULL CHECK (kind IN ('confirmed', 'contradiction', 'unverifiable', 'suggestion')),
+        text         TEXT NOT NULL,
+        detail       TEXT,
+        source       TEXT,
+        refs_json    TEXT NOT NULL DEFAULT '[]',
+        action_json  TEXT,
+        status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'accepted', 'dismissed')),
+        resolved_at  TEXT
+    );
+    CREATE INDEX findings_by_analysis ON analysis_findings (analysis_id, position);
+    """,
 ]
 
 

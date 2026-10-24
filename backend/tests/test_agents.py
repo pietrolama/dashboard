@@ -140,3 +140,11 @@ def test_missing_executable(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(AgentError, match="not found on PATH"):
         agents.run("agy", "x", tmp_path)
+
+
+def test_json_schema_only_for_claude():
+    schema = {"type": "object"}
+    cmd, _ = agents.build_command("claude", "p", "read", 60, "claude", json_schema=schema)
+    assert cmd[cmd.index("--json-schema") + 1] == '{"type": "object"}'
+    cmd, _ = agents.build_command("agy", "p", "read", 60, "agy", json_schema=schema)
+    assert "--json-schema" not in cmd

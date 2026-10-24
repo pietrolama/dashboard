@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import resume
+from .analysis import Analysis
 from .config import Settings
 from .team import Team
 from .db import Database
@@ -112,6 +113,11 @@ class LinkIn(BaseModel):
     note: str | None = Field(None, max_length=2000)
 
 
+class AnalysisIn(BaseModel):
+    # Run even if nothing changed since the last analysis.
+    force: bool = False
+
+
 class RootIn(BaseModel):
     path: str
     max_depth: int = Field(3, ge=1, le=6)
@@ -146,6 +152,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     memory = registry.memory
     team = Team(db, settings, registry)
     team_busy: set[int] = set()
+    analysis = Analysis(db, registry)
 
     async def scheduler() -> None:
         while True:
@@ -183,9 +190,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 log.exception("team loop failed")
             await asyncio.sleep(2)
 
+    async def analysis_loop() -> None:
+        # Like team jobs: queued by a request, run here so the request returns at once.
+        await asyncio.to_thread(analysis.recover)
+        while True:
+            try:
+                for analysis_id in analysis.pending():
+                    await asyncio.to_thread(analysis.run, analysis_id)
+            except Exception:
+                log.exception("analysis loop failed")
+            await asyncio.sleep(2)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        tasks = [asyncio.create_task(team_loop())]
+        tasks = [asyncio.create_task(team_loop()), asyncio.create_task(analysis_loop())]
         if settings.scan_interval_s > 0:
             tasks.append(asyncio.create_task(scheduler()))
         yield
@@ -279,6 +297,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.delete("/api/links/{link_id}", status_code=204)
     def remove_link(link_id: int):
         registry.relations.remove_link(link_id)
+
+    # ---- AI analysis (agy extracts, claude verifies)
+
+    @app.get("/api/projects/{slug}/analysis")
+    def latest_analysis(slug: str):
+        return analysis.latest(registry.resolve(slug))
+
+    @app.get("/api/projects/{slug}/analyses")
+    def list_analyses(slug: str):
+        return analysis.list(registry.resolve(slug))
+
+    @app.post("/api/projects/{slug}/analyses", status_code=201)
+    def request_analysis(slug: str, body: AnalysisIn):
+        return analysis.request(registry.resolve(slug), force=body.force)
+
+    @app.get("/api/analyses/{analysis_id}")
+    def get_analysis(analysis_id: int):
+        return analysis.get(analysis_id)
+
+    @app.post("/api/findings/{finding_id}/accept")
+    def accept_finding(finding_id: int):
+        return analysis.resolve(finding_id, accept=True)
+
+    @app.post("/api/findings/{finding_id}/dismiss")
+    def dismiss_finding(finding_id: int):
+        return analysis.resolve(finding_id, accept=False)
 
     # ---- Riprendi progetto (PRP)
 

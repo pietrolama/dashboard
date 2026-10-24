@@ -55,6 +55,8 @@ class AgentResult:
     stderr: str
     cwd: str
     raw: dict | None = field(default=None, repr=False)
+    # The reply as an object, when a JSON schema was passed (claude only: see build_command).
+    structured: dict | None = None
 
     @property
     def ok(self) -> bool:
@@ -66,6 +68,7 @@ class AgentResult:
 
 def build_command(
     agent: str, prompt: str, mode: str, timeout_s: int, executable: str, model: str | None = None,
+    json_schema: dict | None = None,
 ) -> tuple[list[str], str]:
     """The argv to run and the text to write to its stdin."""
     if agent not in AGENTS:
@@ -82,6 +85,10 @@ def build_command(
     cmd += ["--output-format", "json", *_PERMISSION_FLAGS[agent][mode]]
     if model:
         cmd += ["--model", model]
+    # agy accepts --json-schema too, but fills the object in a separate pass
+    # that loses what the reply said; its JSON is asked for in the prompt instead.
+    if json_schema is not None and agent == "claude":
+        cmd += ["--json-schema", json.dumps(json_schema)]
     return cmd, stdin
 
 
@@ -93,6 +100,7 @@ def run(
     timeout_s: int = DEFAULT_TIMEOUT_S,
     model: str | None = None,
     executable: str | None = None,
+    json_schema: dict | None = None,
 ) -> AgentResult:
     cwd = Path(cwd).expanduser().resolve()
     if not cwd.is_dir():
@@ -101,7 +109,7 @@ def run(
     if not exe:
         raise AgentError(f"{agent} executable not found on PATH")
 
-    cmd, stdin = build_command(agent, prompt, mode, timeout_s, exe, model)
+    cmd, stdin = build_command(agent, prompt, mode, timeout_s, exe, model, json_schema)
     started = time.monotonic()
     # A new session makes the agent the leader of its own process group, so a
     # timeout also stops the tools and shells it started.
@@ -162,6 +170,7 @@ def _parse_claude(data: dict | None, stderr: str) -> dict:
         "session_id": data.get("session_id"),
         "num_turns": data.get("num_turns"),
         "cost_usd": data.get("total_cost_usd"),
+        "structured": data.get("structured_output") if isinstance(data.get("structured_output"), dict) else None,
         "tokens": {
             "input": sum(p for p in input_parts if p) if any(p is not None for p in input_parts) else None,
             "output": usage.get("output_tokens"),

@@ -288,6 +288,30 @@ def build_brief(registry: Registry, project_id: int, mode: str = "implementation
     if not phase:
         unknown("Development phase not declared.")
 
+    # --- AI analysis (inferences, never facts)
+    analysis = project["evidence"].get("agent_analysis")
+    if analysis:
+        payload = analysis["payload"]
+        head = payload.get("head_commit")
+        current = not repository or not head or head == repository["head_commit"]
+        ev = add_evidence(
+            f"ev_analysis_{payload['analysis']}", "agent_analysis", f"AI analysis #{payload['analysis']}",
+            {"kind": "project_os", "label": f"analysis #{payload['analysis']}", "commit": head},
+            analysis["observed_at"], payload,
+            ["Written by agents (agy read the declared state, claude checked it against the code); "
+             "not reviewed by the user unless a finding is marked accepted."]
+            + ([] if current else ["Made on an older commit than the current HEAD."]),
+        )
+        if payload.get("summary"):
+            inferences.append({"id": ids("inf"), "method": "ai", "confidence": None, "evidence_ids": [ev],
+                               "text": payload["summary"]})
+        for f in db.query(
+                """SELECT text, detail FROM analysis_findings
+                   WHERE analysis_id = ? AND kind = 'contradiction' AND status = 'open' ORDER BY position""",
+                (payload["analysis"],)):
+            inferences.append({"id": ids("inf"), "method": "ai", "confidence": None, "evidence_ids": [ev],
+                               "text": f"Possible contradiction: {f['text']}" + (f" — {f['detail']}" if f["detail"] else "")})
+
     # --- decisions and constraints
     decision_sources = _writers(db, project_id, "decision_recorded")
     session_sources = _writers(db, project_id, "session_ended") | _writers(db, project_id, "session_started")
