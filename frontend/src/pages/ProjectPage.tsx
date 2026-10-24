@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type GitState, type Lifecycle, type Phase, type ProjectDetail } from "../api";
 import { Chip, Empty, ErrorBox, Field, HealthBadge, Panel } from "../components";
 import { DecisionsPanel, ResumePanel, SessionsPanel } from "../memory";
+import { RelationsPanel } from "../relations";
 import { ResumeDialog } from "../resume";
 import { TeamPanel } from "../team";
 import { describeEvent, formatDate, HEALTH_HINT, LIFECYCLE_LABEL, PHASE_LABEL, PRIORITY_LABEL, relativeTime, useAsync } from "../util";
@@ -88,6 +89,8 @@ export default function ProjectPage() {
           <ResumePanel project={p} onChange={reload} />
 
           <DecisionsPanel project={p} onChange={reload} />
+
+          <RelationsPanel project={p} onChange={reload} />
 
           <Panel title="Descrizione" subtitle="Dichiarata da te. Lo scanner non la modifica mai.">
             <DescriptionEditor key={p.description ?? ""} value={p.description} placeholder={p.readme_summary} onSave={(description) => save({ description })} />

@@ -25,6 +25,7 @@ from . import discovery
 from .db import Database, utcnow
 from .errors import Conflict, NotFound, record_event
 from .memory import Memory
+from .relations import Relations
 
 STALE_AFTER = timedelta(days=30)
 LIFECYCLES = ("active", "paused", "archived")
@@ -48,6 +49,7 @@ class Registry:
     def __init__(self, db: Database):
         self.db = db
         self.memory = Memory(db)
+        self.relations = Relations(db)
         self._scan_lock = threading.Lock()
 
     # ------------------------------------------------------------------ roots
@@ -546,6 +548,7 @@ class Registry:
             "events": self.list_events(project_id=project_id, limit=50),
             "decisions": self.memory.list_decisions(project_id),
             "sessions": self.memory.list_sessions(project_id),
+            "relations": self.relations.relations(project_id),
         }
 
     def resolve(self, slug: str) -> int:
@@ -556,6 +559,15 @@ class Registry:
 
     def get_project_by_slug(self, slug: str) -> dict:
         return self.get_project(self.resolve(slug))
+
+    def relation_graph(self) -> dict:
+        """Every project as a node, with declared and observed relations."""
+        nodes = [
+            {k: p[k] for k in ("slug", "name", "lifecycle", "phase", "priority", "health",
+                               "stack", "last_activity_at")}
+            for p in self.list_projects()
+        ]
+        return {"nodes": nodes, "relations": self.relations.relations()}
 
     # ----------------------------------------------------------------- events
 

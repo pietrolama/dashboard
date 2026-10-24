@@ -195,6 +195,20 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX team_messages_by_run ON team_messages (run_id, id);
     """,
+    # 5 — Declared relations between projects (the radial map)
+    """
+    CREATE TABLE project_links (
+        id          INTEGER PRIMARY KEY,
+        source_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        target_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind        TEXT NOT NULL CHECK (kind IN ('depends_on', 'part_of', 'evolves_from', 'related')),
+        note        TEXT,
+        created_at  TEXT NOT NULL,
+        CHECK (source_id != target_id),
+        UNIQUE (source_id, target_id, kind)
+    );
+    CREATE INDEX project_links_by_target ON project_links (target_id);
+    """,
 ]
 
 

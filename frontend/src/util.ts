@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Health, Lifecycle, Phase, ProjectEvent } from "./api";
+import type { Health, Lifecycle, LinkKind, ObservedKind, Phase, ProjectEvent } from "./api";
 
 const rtf = new Intl.RelativeTimeFormat("it", { numeric: "auto" });
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -51,6 +51,26 @@ export const HEALTH_HINT: Record<Health, string> = {
   stale: "Attivo ma senza modifiche da oltre 30 giorni",
   missing: "La directory non è stata trovata all'ultima scansione",
   unknown: "Nessuna attività osservata",
+};
+
+/** How a relation reads from its source: "A dipende da B". */
+export const LINK_LABEL: Record<LinkKind | ObservedKind, string> = {
+  depends_on: "dipende da",
+  part_of: "fa parte di",
+  evolves_from: "è l'evoluzione di",
+  related: "collegato a",
+  same_remote: "stesso remote di",
+  contains: "contiene",
+};
+
+/** The same relation read from its target: "B è usato da A". */
+export const LINK_LABEL_REVERSE: Record<LinkKind | ObservedKind, string> = {
+  depends_on: "è usato da",
+  part_of: "include",
+  evolves_from: "si è evoluto in",
+  related: "collegato a",
+  same_remote: "stesso remote di",
+  contains: "sta dentro",
 };
 
 export const PRIORITY_LABEL = ["Nessuna", "Bassa", "Media", "Alta"];
@@ -108,6 +128,10 @@ export function describeEvent(e: ProjectEvent): string {
       return `Team run #${p.run} scartato`;
     case "team_run_failed":
       return `Team run #${p.run} non riuscito`;
+    case "link_added":
+      return `Relazione: ${p.from} ${LINK_LABEL[p.kind as LinkKind] ?? p.kind} ${p.to}`;
+    case "link_removed":
+      return `Relazione rimossa: ${p.from} ${LINK_LABEL[p.kind as LinkKind] ?? p.kind} ${p.to}`;
     case "brief_exported":
       return `Briefing esportato (${p.freshness})`;
     default:

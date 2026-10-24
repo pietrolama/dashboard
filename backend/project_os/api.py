@@ -103,6 +103,15 @@ class TeamMessageIn(BaseModel):
     text: str = Field(min_length=1, max_length=5000)
 
 
+LinkKind = Literal["depends_on", "part_of", "evolves_from", "related"]
+
+
+class LinkIn(BaseModel):
+    target: str = Field(min_length=1)
+    kind: LinkKind = "related"
+    note: str | None = Field(None, max_length=2000)
+
+
 class RootIn(BaseModel):
     path: str
     max_depth: int = Field(3, ge=1, le=6)
@@ -255,6 +264,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.patch("/api/sessions/{session_id}")
     def update_session(session_id: int, body: SessionPatch):
         return memory.update_session(session_id, **body.model_dump(exclude_unset=True))
+
+    # ---- relations (radial map)
+
+    @app.get("/api/relations")
+    def relation_graph():
+        return registry.relation_graph()
+
+    @app.post("/api/projects/{slug}/links", status_code=201)
+    def add_link(slug: str, body: LinkIn):
+        return registry.relations.add_link(registry.resolve(slug), registry.resolve(body.target),
+                                           body.kind, body.note)
+
+    @app.delete("/api/links/{link_id}", status_code=204)
+    def remove_link(link_id: int):
+        registry.relations.remove_link(link_id)
 
     # ---- Riprendi progetto (PRP)
 

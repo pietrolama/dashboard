@@ -59,6 +59,7 @@ async def test_server_init_and_close(tmp_path: Path):
         "preview_resume",
         "export_resume",
         "scan_projects",
+        "link_projects",
     }
     assert expected.issubset(tool_names)
     database.close()
@@ -358,3 +359,21 @@ async def test_mcp_stdio_client_roundtrip(tmp_path: Path):
             err_res = await session.call_tool("get_project_context", {"project": "missing-proj"})
             assert err_res.is_error
             assert "NotFound" in err_res.content[0].text or "not found" in err_res.content[0].text.lower()
+
+
+@pytest.mark.anyio
+async def test_link_projects(mcp_setup):
+    server, db, settings, tmp_path = mcp_setup
+    registry = Registry(db)
+    registry.create_project("Lab")
+    registry.create_project("Lab Two")
+
+    res = await server.call_tool("link_projects", {"project": "lab-two", "target": "lab", "kind": "evolves_from"})
+    assert not res.is_error
+    assert json.loads(res.content[0].text)["kind"] == "evolves_from"
+    assert registry.list_events(limit=1)[0]["source"] == "agent"
+
+    with pytest.raises(ToolError, match="already linked"):
+        await server.call_tool("link_projects", {"project": "lab-two", "target": "lab", "kind": "evolves_from"})
+    with pytest.raises(ToolError, match="not found"):
+        await server.call_tool("link_projects", {"project": "lab", "target": "nope"})

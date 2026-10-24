@@ -101,11 +101,44 @@ export interface ProjectEvent {
   payload: Record<string, unknown>;
 }
 
+export type LinkKind = "depends_on" | "part_of" | "evolves_from" | "related";
+export type ObservedKind = "same_remote" | "contains";
+
+/** An edge of the relation map. Declared links have an id; observed ones are derived and have none. */
+export interface Relation {
+  id: number | null;
+  origin: "declared" | "observed";
+  kind: LinkKind | ObservedKind;
+  note: string | null;
+  source: string;
+  target: string;
+  source_name: string;
+  target_name: string;
+  created_at: string | null;
+}
+
+export interface RelationNode {
+  slug: string;
+  name: string;
+  lifecycle: Lifecycle;
+  phase: Phase | null;
+  priority: number;
+  health: Health;
+  stack: string[];
+  last_activity_at: string | null;
+}
+
+export interface RelationGraph {
+  nodes: RelationNode[];
+  relations: Relation[];
+}
+
 export interface ProjectDetail extends Project {
   evidence: Record<string, Evidence>;
   events: ProjectEvent[];
   decisions: Decision[];
   sessions: WorkSession[];
+  relations: Relation[];
 }
 
 export interface ScanRun {
@@ -285,6 +318,10 @@ export const api = {
   ) => request<Decision>("POST", `/projects/${encodeURIComponent(slug)}/decisions`, body),
   updateDecision: (id: number, body: Partial<Pick<Decision, "title" | "rationale" | "alternatives" | "kind">> & { status?: "active" | "review" }) =>
     request<Decision>("PATCH", `/decisions/${id}`, body),
+  relations: () => request<RelationGraph>("GET", "/relations"),
+  addLink: (slug: string, body: { target: string; kind: LinkKind; note?: string | null }) =>
+    request<Relation>("POST", `/projects/${encodeURIComponent(slug)}/links`, body),
+  removeLink: (id: number) => request<void>("DELETE", `/links/${id}`),
   startSession: (slug: string, goal: string) =>
     request<WorkSession>("POST", `/projects/${encodeURIComponent(slug)}/sessions`, { goal }),
   logSession: (slug: string, body: SessionNotes & { goal: string }) =>

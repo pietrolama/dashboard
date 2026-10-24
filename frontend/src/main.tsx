@@ -4,6 +4,7 @@ import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import "./index.css";
 import Dashboard from "./pages/Dashboard";
 import ProjectPage from "./pages/ProjectPage";
+import RelationMap from "./pages/RelationMap";
 import Settings from "./pages/Settings";
 
 function Layout({ children }: { children: React.ReactNode }) {
@@ -24,6 +25,9 @@ function Layout({ children }: { children: React.ReactNode }) {
             <NavLink to="/" end className={link}>
               Progetti
             </NavLink>
+            <NavLink to="/map" className={link}>
+              Mappa
+            </NavLink>
             <NavLink to="/settings" className={link}>
               Sorgenti
             </NavLink>
@@ -42,6 +46,7 @@ createRoot(document.getElementById("root")!).render(
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/p/:slug" element={<ProjectPage />} />
+          <Route path="/map" element={<RelationMap />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>

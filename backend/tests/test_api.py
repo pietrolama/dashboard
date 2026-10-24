@@ -50,3 +50,24 @@ def test_manual_project_crud(client):
 def test_invalid_root(client, tmp_path):
     r = client.post("/api/roots", json={"path": str(tmp_path / "does-not-exist")})
     assert r.status_code == 409
+
+
+def test_links_api(client):
+    for name in ("Alpha", "Beta"):
+        assert client.post("/api/projects", json={"name": name}).status_code == 201
+
+    r = client.post("/api/projects/alpha/links", json={"target": "beta", "kind": "evolves_from"})
+    assert r.status_code == 201
+    link_id = r.json()["id"]
+    assert client.post("/api/projects/alpha/links", json={"target": "beta", "kind": "evolves_from"}).status_code == 409
+    assert client.post("/api/projects/alpha/links", json={"target": "nope"}).status_code == 404
+    assert client.post("/api/projects/alpha/links", json={"target": "beta", "kind": "bogus"}).status_code == 422
+
+    graph = client.get("/api/relations").json()
+    assert {n["slug"] for n in graph["nodes"]} == {"alpha", "beta"}
+    assert graph["relations"][0]["source"] == "alpha"
+    assert client.get("/api/projects/beta").json()["relations"][0]["kind"] == "evolves_from"
+
+    assert client.delete(f"/api/links/{link_id}").status_code == 204
+    assert client.delete(f"/api/links/{link_id}").status_code == 404
+    assert client.get("/api/relations").json()["relations"] == []

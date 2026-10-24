@@ -63,11 +63,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-input,
-select,
-textarea,
-button {
-  font: inherit;
+/* In the base layer so text-* utilities on form controls still win. */
+@layer base {
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
 }
 
 @layer components {

@@ -79,7 +79,7 @@ def create_mcp_server(settings: Settings | None = None, db: Database | None = No
         name="get_project_context",
         description=(
             "Get detailed project context including metadata, declared lifecycle/phase, "
-            "linked repositories, observed git status, stack, latest evidence, and recent events."
+            "linked repositories, observed git status, stack, latest evidence, recent events, and relations to other projects."
         ),
     )
     def get_project_context(project: str) -> dict[str, Any]:
@@ -138,6 +138,27 @@ def create_mcp_server(settings: Settings | None = None, db: Database | None = No
                 supersedes_id=supersedes_id,
                 source=AGENT_SOURCE,
             )
+        except (NotFound, Conflict) as exc:
+            raise ToolError(str(exc)) from exc
+
+    @server.tool(
+        name="link_projects",
+        description=(
+            "Declare a relation between two projects, shown on the radial map: 'depends_on' "
+            "(project uses target), 'part_of' (project is a component of target), 'evolves_from' "
+            "(project is the successor of target) or 'related'."
+        ),
+    )
+    def link_projects(
+        project: str,
+        target: str,
+        kind: Literal["depends_on", "part_of", "evolves_from", "related"] = "related",
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        project_id = _resolve_project_id(registry, project)
+        target_id = _resolve_project_id(registry, target)
+        try:
+            return registry.relations.add_link(project_id, target_id, kind, note, source=AGENT_SOURCE)
         except (NotFound, Conflict) as exc:
             raise ToolError(str(exc)) from exc
 

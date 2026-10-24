@@ -6,6 +6,7 @@ Dashboard locale di tutti i tuoi progetti. Milestone completate:
 2. **Memoria operativa**: registro delle decisioni e dei vincoli, sessioni di lavoro, "dove eri rimasto".
 3. **Riprendi progetto**: briefing portabile nel formato Project Resume Protocol (PRP 1.0) per Claude Code e altri dev agent.
 4. **Team**: Claude Code e Antigravity lavorano insieme su una richiesta, ciascuno nel proprio terminale e branch.
+5. **Mappa delle relazioni**: vista radiale dei legami tra progetti, dichiarati o osservati dai repository.
 
 ## Avvio
 
@@ -120,9 +121,16 @@ Prima volta per progetto: Claude Code chiede se autorizzare la cartella e propon
 
 Da riga di comando, `project_os agent-run claude|agy "prompt" --project <slug>` esegue un agente una volta, in modo non interattivo, e stampa il risultato in JSON.
 
+## Mappa delle relazioni
+
+**Mappa** mostra i progetti in cerchio, raggruppati per legami; clicca un progetto per metterlo al centro, con le relazioni dirette sul primo anello, quelle a due passi sul secondo e il resto all'esterno. Anche qui stato dichiarato e osservato restano separati:
+
+- **Dichiarate** (tu o un agente, dalla scheda progetto, dalla mappa o col tool MCP `link_projects`): *dipende da*, *fa parte di*, *è l'evoluzione di*, *collegato a*. Ogni aggiunta o rimozione va nella cronologia di entrambi i progetti.
+- **Osservate** (calcolate a ogni lettura, mai salvate): due progetti con lo stesso remote Git, una cartella-progetto dentro un'altra. Sulla mappa sono tratteggiate.
+
 ## Server MCP
 
-`project_os mcp` espone Project OS agli agenti su stdio (SDK MCP ufficiale). Tool: `list_projects`, `get_project_context`, `get_project_memory`, `record_decision`, `log_work_session`, `preview_resume`, `export_resume`, `scan_projects` e, per i team run, `team_board`, `team_task`, `team_message`, `team_done`. Le voci scritte da un agente hanno `source = agent`; `scan_projects` lavora solo sulle sorgenti già registrate.
+`project_os mcp` espone Project OS agli agenti su stdio (SDK MCP ufficiale). Tool: `list_projects`, `get_project_context`, `get_project_memory`, `record_decision`, `log_work_session`, `preview_resume`, `export_resume`, `scan_projects`, `link_projects` e, per i team run, `team_board`, `team_task`, `team_message`, `team_done`. Le voci scritte da un agente hanno `source = agent`; `scan_projects` lavora solo sulle sorgenti già registrate.
 
 Per Claude Code:
 
@@ -138,4 +146,4 @@ cd backend && ../.venv/bin/python -m pytest
 
 ## Prossime milestone
 
-Dalla roadmap: mappa radiale delle relazioni → analisi AI opzionale (sintesi e contraddizioni, salvate come evidenze `agent_analysis`).
+Dalla roadmap: analisi AI opzionale (sintesi e contraddizioni, salvate come evidenze `agent_analysis`).
